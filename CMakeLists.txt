@@ -6,6 +6,7 @@ set(CMAKE_C_STANDARD 11)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GTK3 REQUIRED gtk+-3.0)
 pkg_check_modules(X11 REQUIRED x11)
+pkg_check_modules(XCB REQUIRED xcb)
 
 
 
@@ -17,3 +18,6 @@ target_include_directories(gtk-test PRIVATE ${GTK3_INCLUDE_DIRS})
 
 target_link_libraries(gtk-test  ${X11_LIBRARIES})
 target_include_directories(gtk-test PRIVATE ${X11_INCLUDE_DIRS})
+
+target_link_libraries(gtk-test  ${XCB_LIBRARIES})
+target_include_directories(gtk-test PRIVATE ${XCB_INCLUDE_DIRS})
