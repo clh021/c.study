@@ -253,7 +253,10 @@ void checkWinByXlib() {
 
     display = XOpenDisplay(":0");
     assert(display != NULL);
-    XGetWindowAttributes(display, w, window_attributes_return);
+    int status;
+    status = XGetWindowAttributes(display, w, window_attributes_return);
+
+    printf("%d \n", status);
     printf("%d \n", window_attributes_return);
 }
 int main(int argc, char *argv[]) {
