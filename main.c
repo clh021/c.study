@@ -50,8 +50,11 @@ void more() {
 //    const Window xwin = GDK_WINDOW_XID(win_cr);
 //    Display * const display=GDK_WINDOW_XDISPLAY(win_cr);
 }
-
-gboolean  my_gtk_key_press_event(GtkWidget *widget, GdkEventKey *event, gpointer data)
+gboolean self_gtk_configure_event(GtkWidget *widget, GdkEvent *event, gpointer data)
+{
+//    e = static_cast(event, &GdkEventConfigure); // CONTINUE
+}
+gboolean self_gtk_key_press_event(GtkWidget *widget, GdkEventKey *event, gpointer data)
 {
     GdkWindow *window = gtk_widget_get_window(widget);
 
@@ -71,6 +74,14 @@ gboolean  my_gtk_key_press_event(GtkWidget *widget, GdkEventKey *event, gpointer
             break;
     }
 }
+int debugSelfWin() {
+    GtkWidget *win;
+    win = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+    gtk_window_set_default_size (GTK_WINDOW(win), 640, 400);
+    g_signal_connect(G_OBJECT(win), "key-press-event", G_CALLBACK(self_gtk_key_press_event), win);
+    g_signal_connect(G_OBJECT(win), "configure-event", G_CALLBACK(self_gtk_configure_event), win);
+    gtk_widget_show_all(win);
+}
 int main(int argc, char *argv[]) {
 //    int x11ID = getX11ID(argc, argv);
 //    assert(x11ID > 0);
@@ -79,24 +90,21 @@ int main(int argc, char *argv[]) {
     gtk_init(&argc, &argv);
 
     // 获取窗口
-    GdkWindow *gdkWin = getGdkWin(0x7200005);
+    gint64 xid = 0x7200005;//g_ascii_strtoll(x11ID, NULL, 16);
+    printf("xid: %d \n", xid);
+    GdkWindow *gdkWin = getGdkWin((xid));
     checkWin(gdkWin);
 
     GdkWindowState state = gdk_window_get_state(gdkWin);
     printf("state: %d\n", state);
     printf("size of state: %ld\n", sizeof(state));
 
-    GtkWidget *win;
-    win = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-    gtk_window_set_default_size (GTK_WINDOW(win), 640, 400);
-    g_signal_connect(G_OBJECT(win), "key-press-event", G_CALLBACK(my_gtk_key_press_event), win);
+//    gdk_window_get_state(gdkWin);
+//    gtk_widget_get_state(gtkWin);
+//    gtk_widget_get_state_flags(gtkWin);
+//    gtk_widget_get_parent_window(gtkWin);
 
-//    let state = gdk_window_get_state(gdkWin);
-//    let state = gtk_widget_get_state(gtkWin);
-//    let state = gtk_widget_get_state_flags(gtkWin);
-//    let state = gtk_widget_get_parent_window(gtkWin);
-
-    gtk_widget_show_all(win);
+    debugSelfWin();
     gtk_main();
     return 0;
 }
