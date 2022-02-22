@@ -4,8 +4,7 @@
 #include <errno.h>   // for errno
 #include <limits.h>  // for INT_MAX, INT_MIN
 #include <stdlib.h>  // for strtol
-#include <typeinfo>  // for typeid
-#include <iostream>  // for std::cout
+#include <assert.h>
 
 int printVersion() {
     printf("GTK+ version: %d.%d.%d\n", gtk_major_version,
@@ -19,7 +18,8 @@ int getX11ID(int argc, char *argv[]) {
     int x11ID;
     if (argc == 2) {
     } else {
-        printf("有且需要一个参数: X11ID");
+        fprintf(stderr, "有且需要一个参数: X11ID");
+        return -1;
     }
     errno = 0;
     long conv = strtol(argv[1], &p, 10);
@@ -72,8 +72,10 @@ gboolean  my_gtk_key_press_event(GtkWidget *widget, GdkEventKey *event, gpointer
     }
 }
 int main(int argc, char *argv[]) {
-    int x11ID = getX11ID(argc, argv);
-    printf("X11ID: %d \n", x11ID);
+//    int x11ID = getX11ID(argc, argv);
+//    assert(x11ID > 0);
+//    printf("X11ID: %d \n", x11ID);
+
     gtk_init(&argc, &argv);
 
     // 获取窗口
@@ -81,13 +83,14 @@ int main(int argc, char *argv[]) {
     checkWin(gdkWin);
 
     GdkWindowState state = gdk_window_get_state(gdkWin);
+    printf("state: %d\n", state);
+    printf("size of state: %ld\n", sizeof(state));
 
     GtkWidget *win;
     win = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_default_size (GTK_WINDOW(win), 640, 400);
     g_signal_connect(G_OBJECT(win), "key-press-event", G_CALLBACK(my_gtk_key_press_event), win);
 
-//    std::cout << typeid(state).name() << '\n';
 //    let state = gdk_window_get_state(gdkWin);
 //    let state = gtk_widget_get_state(gtkWin);
 //    let state = gtk_widget_get_state_flags(gtkWin);

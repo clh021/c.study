@@ -1,17 +1,12 @@
 cmake_minimum_required(VERSION 3.21)
-project(lithium_debug C)
+project(lithium_debug)
 
 set(CMAKE_C_STANDARD 11)
-
-include_directories(.)
-
-add_executable(main.c)
-
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GTK3 REQUIRED gtk+-3.0)
 
-include_directories(${GTK3_INCLUDE_DIRS})
-link_directories(${GTK3_LIBRARY_DIRS})
-
-add_definitions(${GTK3_CFLAGS_OTHER})
+set(SOURCE_FILES main.c)
+add_executable(gtk-test ${SOURCE_FILES})
+target_link_libraries(gtk-test ${GTK3_LIBRARIES})
+target_include_directories(gtk-test PRIVATE ${GTK3_INCLUDE_DIRS})
