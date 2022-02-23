@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include <xcb/xcb.h>
 #include <xcb/xproto.h>
+#include <X11/cursorfont.h>
 
 int printVersion() {
     printf("GTK+ version: %d.%d.%d\n", gtk_major_version,
@@ -391,85 +392,63 @@ window_id_str (xcb_window_t id)
 
     return str;
 }
+struct atom_cache_entry {
+    xcb_atom_t atom;
+    const char *name;
+    xcb_intern_atom_cookie_t intern_atom;
+    struct atom_cache_entry *next;
+};
+static struct atom_cache_entry *atom_cache;
+/*
+ * Send a request to the server for an atom by name
+ * Does not create the atom if it is not already present
+ */
+struct atom_cache_entry *Intern_Atom (xcb_connection_t * dpy, const char *name)
+{
+    struct atom_cache_entry *a;
+
+    for (a = atom_cache ; a != NULL ; a = a->next) {
+        if (strcmp (a->name, name) == 0)
+            return a; /* already requested or found */
+    }
+
+    a = calloc(1, sizeof(struct atom_cache_entry));
+    if (a != NULL) {
+        a->name = name;
+        a->intern_atom = xcb_intern_atom (dpy, False, strlen (name), (name));
+        a->next = atom_cache;
+        atom_cache = a;
+    }
+    return a;
+}
 
 
-//static void
-//Display_Window_Id (struct wininfo *w, Bool newline_wanted)
-//{
-//#ifdef USE_XCB_ICCCM
-//    xcb_icccm_get_text_property_reply_t wmn_reply;
-//    uint8_t got_reply = False;
-//#endif
-//    xcb_get_property_reply_t *prop;
-//    const char *wm_name = NULL;
-//    unsigned int wm_name_len = 0;
-//    xcb_atom_t wm_name_encoding = XCB_NONE;
-//
-//    printf ("%s", window_id_str (w->window));
-//
-//    if (!w->window) {
-//        printf (" (none)");
-//    } else {
-//        if (w->window == screen->root) {
-//            printf (" (the root window)");
-//        }
-//        /* Get window name if any */
-//        prop = xcb_get_property_reply (dpy, w->net_wm_name_cookie, NULL);
-//        if (prop && (prop->type != XCB_NONE)) {
-//            wm_name = xcb_get_property_value (prop);
-//            wm_name_len = xcb_get_property_value_length (prop);
-//            wm_name_encoding = prop->type;
-//        } else { /* No _NET_WM_NAME, check WM_NAME */
-//#ifdef USE_XCB_ICCCM
-//            got_reply = xcb_icccm_get_wm_name_reply (dpy, w->wm_name_cookie,
-//						     &wmn_reply, NULL);
-//	    if (got_reply) {
-//		wm_name = wmn_reply.name;
-//		wm_name_len = wmn_reply.name_len;
-//		wm_name_encoding = wmn_reply.encoding;
-//	    }
-//#else
-//            prop = xcb_get_property_reply (dpy, w->wm_name_cookie, NULL);
-//            if (prop && (prop->type != XCB_NONE)) {
-//                wm_name = xcb_get_property_value (prop);
-//                wm_name_len = xcb_get_property_value_length (prop);
-//                wm_name_encoding = prop->type;
-//            }
-//#endif
-//        }
-//        if (wm_name_len == 0) {
-//            printf (" (has no name)");
-//        } else {
-//            if (wm_name_encoding == XCB_ATOM_STRING) {
-//                printf (" \"%.*s\"", wm_name_len, wm_name);
-//            } else if (wm_name_encoding == atom_utf8_string) {
-//                print_utf8 (" \"", wm_name, wm_name_len,  "\"");
-//            } else {
-//                /* Encodings we don't support, including COMPOUND_TEXT */
-//                const char *enc_name = Get_Atom_Name (dpy, wm_name_encoding);
-//                if (enc_name) {
-//                    printf (" (name in unsupported encoding %s)", enc_name);
-//                } else {
-//                    printf (" (name in unsupported encoding ATOM 0x%x)",
-//                            wm_name_encoding);
-//                }
-//            }
-//        }
-//#ifdef USE_XCB_ICCCM
-//        if (got_reply)
-//	    xcb_icccm_get_text_property_reply_wipe (&wmn_reply);
-//#else
-//        free (prop);
-//#endif
-//    }
-//
-//    if (newline_wanted)
-//        printf ("\n");
-//
-//    return;
-//}
+/* Get an atom by name when it is needed. */
+xcb_atom_t Get_Atom (xcb_connection_t * dpy, const char *name)
+{
+    struct atom_cache_entry *a = Intern_Atom (dpy, name);
 
-int checkWinByXCB() {
+    if (a == NULL)
+        return XCB_ATOM_NONE;
+
+    if (a->atom == XCB_ATOM_NONE) {
+        xcb_intern_atom_reply_t *reply;
+
+        reply = xcb_intern_atom_reply(dpy, a->intern_atom, NULL);
+        if (reply) {
+            a->atom = reply->atom;
+            free (reply);
+        } else {
+            a->atom = (xcb_atom_t) -1;
+        }
+    }
+    if (a->atom == (xcb_atom_t) -1) /* internal error */
+        return XCB_ATOM_NONE;
+
+    return a->atom;
+}
+
+int checkWinByXCB2() {
     xcb_icccm_wm_hints_t wmhints;
     long flags;
     char *display_name = ":0";
@@ -479,8 +458,8 @@ int checkWinByXCB() {
     xcb_screen_t *screen;
     xcb_window_t window;
 
-    const int depth = 0, x = 0, y = 0, width = 150, height = 150,
-            border_width = 1;
+//    const int depth = 0, x = 0, y = 0, width = 150, height = 150,
+//            border_width = 1;
 
     if (! dpy)
     {
@@ -488,10 +467,6 @@ int checkWinByXCB() {
         exit(EXIT_FAILURE);
     }
 
-    /* Now that we have an open Display object, cast it to an
-     * XCBConnection object so it can be used with native XCB
-     * functions.
-     */
     c = XGetXCBConnection(dpy);
 
     if (! c)
@@ -504,32 +479,176 @@ int checkWinByXCB() {
     /* Do something meaningful, fun, and interesting with the new
      * XCBConnection object.
      */
-    setup  = xcb_get_setup (c);
-    screen = (xcb_setup_roots_iterator (setup)).data;
-    window = xcb_generate_id (c);
+//    setup  = xcb_get_setup (c);
+//    screen = (xcb_setup_roots_iterator (setup)).data;
+//    window = xcb_generate_id (c);
+//    window = xcb_get_property()
+//    xcb_window_
+//    xcb_create_window (c, depth, window, screen->root, x, y, width, height,
+//                       border_width, InputOutput, screen->root_visual, 0, NULL);
+//    xcb_map_window (c, window);
 
-    xcb_create_window (c, depth, window, screen->root, x, y, width, height,
-                       border_width, InputOutput, screen->root_visual, 0, NULL);
-    xcb_map_window (c, window);
-    xcb_flush (c);
+//    xcb_flush (c);
 
-    pause();
+//    pause();
 
-    return EXIT_SUCCESS;
-//    Setup_Display_And_Screen(display_name, &dpy, &screen);
-//    if (flags & XCB_ICCCM_WM_HINT_ICON_WINDOW) {
-//        struct wininfo iw;
-//        iw.window = wmhints.icon_window;
-//        iw.net_wm_name_cookie = get_net_wm_name (dpy, iw.window);
-//        iw.wm_name_cookie = xcb_icccm_get_wm_name (dpy, iw.window);
-//
-//        printf ("      Icon window id: ");
-//        Display_Window_Id (&iw, True);
+//    return EXIT_SUCCESS;
+
+
+    xcb_get_property_reply_t *prop;
+    int i;
+    int frame = 0, children = 0;
+    struct wininfo wininfo;
+    struct wininfo *w = &wininfo;
+    memset (w, 0, sizeof(struct wininfo));
+    static atom_net_wm_state;
+    xcb_atom_t atom_wm_state = XCB_ATOM_NONE;
+
+    window = strtoul(0x7600006, NULL, 0);
+    /* If no window selected on command line, let user pick one the hard way */
+    if (!window) {
+        Intern_Atom (dpy, "_NET_VIRTUAL_ROOTS");
+        Intern_Atom (dpy, "WM_STATE");
+    }
+    atom_wm_state = Get_Atom(dpy, "WM_STATE");
+    printf("%s", atom_wm_state);
+    atom_net_wm_state = Get_Atom (dpy, "_NET_WM_STATE");
+    printf("%s", atom_net_wm_state);
+//    if (atom_net_wm_state) {
+//        w->wm_state_cookie = xcb_get_property
+//                (dpy, False, window, atom_net_wm_state,
+//                 XCB_ATOM_ATOM, 0, BUFSIZ);
 //    }
+//    if (atom_net_wm_state) {
+//        prop = xcb_get_property_reply(dpy, w->wm_state_cookie, NULL);
+//        if (prop && (prop->type != XCB_NONE) && (prop->value_len > 0)) {
+//            xcb_atom_t *atoms = xcb_get_property_value(prop);
+//            int atom_count = prop->value_len;
+//
+//            if (atom_count > 0) {
+//                printf("      Window state:\n");
+//                for (i = 0; i < atom_count; i++)
+//                    Display_Atom_Name(atoms[i], "_NET_WM_STATE_");
+//            }
+//        }
+//    }
+}
+
+
+
+
+
+
+xcb_atom_t getatom(xcb_connection_t* c, char *atom_name)
+{
+    xcb_intern_atom_cookie_t atom_cookie;
+    xcb_atom_t atom;
+    xcb_intern_atom_reply_t *rep;
+
+    atom_cookie = xcb_intern_atom(c, 0, strlen(atom_name), atom_name);
+    rep = xcb_intern_atom_reply(c, atom_cookie, NULL);
+    if (NULL != rep)
+    {
+        atom = rep->atom;
+        free(rep);
+        printf("\natom: %ld",atom);
+        fflush(stdout);
+        return atom;
+    }
+    printf("\nError getting atom.\n");
+    exit(1);
+}
+
+void checkWinByXCB3() {
+
+    xcb_generic_error_t *e;
+    int i,j,k;
+
+    xcb_connection_t* c = xcb_connect(NULL, NULL);
+    xcb_atom_t net_client_list = getatom(c,"_NET_CLIENT_LIST");
+    xcb_atom_t net_wm_visible_name = getatom(c,"_NET_WM_VISIBLE_NAME");
+
+    xcb_screen_t* screen = xcb_setup_roots_iterator(xcb_get_setup(c)).data;
+
+    xcb_get_property_cookie_t prop_cookie_list,prop_cookie;
+    xcb_get_property_reply_t *reply_prop_list,*reply_prop;
+
+    prop_cookie_list = xcb_get_property(c, 0, screen->root, net_client_list, XCB_GET_PROPERTY_TYPE_ANY, 0, 100);
+    reply_prop_list = xcb_get_property_reply(c, prop_cookie_list, &e);
+    if(e) {
+        printf("\nError: %d",e->error_code);
+        free(e);
+    }
+    if(reply_prop_list) {
+        int value_len = xcb_get_property_value_length(reply_prop_list);
+        printf("\nvalue_len: %d",value_len);
+        if(value_len) {
+            xcb_window_t* win = xcb_get_property_value(reply_prop_list);
+            for(i=0; i<value_len; i++) {
+                printf("\n--------------------------------\nwin id: %d",win[i]);
+                prop_cookie = xcb_get_property(c, 0, win[i], net_wm_visible_name, XCB_GET_PROPERTY_TYPE_ANY, 0, 1000);
+                reply_prop = xcb_get_property_reply(c, prop_cookie, &e);
+                if(e) {
+                    printf("\nError: %d",e->error_code);
+                    free(e);
+                }
+                if(reply_prop) {
+                    int value_len2 = xcb_get_property_value_length(reply_prop);
+                    printf("\nvalue_len2: %d",value_len2);
+                    if(value_len2) {
+                        char* name = malloc(value_len2+1);
+                        strncpy(name,xcb_get_property_value(reply_prop),value_len2);
+                        name[value_len2] = '\0';
+                        printf("\nName: %s",name);
+                        fflush(stdout);
+                        free(name);
+                    }
+                    free(reply_prop);
+                }
+            }
+        }
+        free(reply_prop_list);
+    }
+    printf("\n\n");
+    fflush(stdout);
+    exit(0);
 }
 int main(int argc, char *argv[]) {
     gtk_init(&argc, &argv);
-    checkWinByXCB();
+//    checkWinByXCB2();
+    checkWinByXCB3();
     gtk_main();
     return 0;
 }
+/** Send request to get a window state (WM_STATE).
+ * \param w A client window.
+ * \return The cookie associated with the request.
+ */
+//xcb_get_property_cookie_t
+//xwindow_get_state_unchecked(xcb_window_t w)
+//{
+//    return xcb_get_property_unchecked(globalconf.connection, false, w, WM_STATE,
+//                                      WM_STATE, 0L, 2L);
+//}
+
+/** Get a window state (WM_STATE).
+ * \param cookie The cookie.
+ * \return The current state of the window, or 0 on error.
+ */
+//uint32_t
+//xwindow_get_state_reply(xcb_get_property_cookie_t cookie)
+//{
+//    /* If no property is set, we just assume a sane default. */
+//    uint32_t result = XCB_ICCCM_WM_STATE_NORMAL;
+//    xcb_get_property_reply_t *prop_r;
+//
+//    if((prop_r = xcb_get_property_reply(globalconf.connection, cookie, NULL)))
+//    {
+//        if(xcb_get_property_value_length(prop_r))
+//            result = *(uint32_t *) xcb_get_property_value(prop_r);
+//
+//        p_delete(&prop_r);
+//    }
+//
+//    return result;
+//}
